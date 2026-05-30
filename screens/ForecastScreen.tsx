@@ -1,4 +1,4 @@
 import { View, Text } from "react-native";
 export default function ForecastScreen() {
-  return <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Text>Coming soon</Text></View>;
+  return <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Text>Forecast coming soon</Text></View>;
 }

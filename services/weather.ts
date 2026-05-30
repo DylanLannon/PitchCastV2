@@ -40,7 +40,7 @@ export interface RiskAssessment {
 
 export async function searchLocation(query: string): Promise<GeoResult[]> {
   const res = await fetch(
-    `${CONFIG.OPENWEATHER_GEO_URL}/direct?q=${encodeURIComponent(query)}&limit=5&appid=${CONFIG.OPENWEATHER_API_KEY}`
+    `${CONFIG.OPENWEATHER_GEO_URL}/direct?q=${encodeURIComponent(query)},GB&limit=5&appid=${CONFIG.OPENWEATHER_API_KEY}`
   );
   const data = await res.json();
   return data.map((item: any) => ({

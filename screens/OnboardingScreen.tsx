@@ -1,6 +1,6 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Platform } from "react-native";
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { COLORS, FONTS } from "../constants/colors";
 import { supabase } from "../services/supabase";
 import { searchLocation, GeoResult } from "../services/weather";
@@ -20,9 +20,21 @@ export default function OnboardingScreen({ onComplete }: Props) {
   const [searching, setSearching] = useState(false);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [productType, setProductType] = useState("");
-  const [pitchPrepaid, setPitchPrepaid] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const searchTimeout = useRef<any>(null);
+
+  useEffect(() => {
+    if (!locationSearch.trim() || selectedLocation) {
+      setSearchResults([]);
+      return;
+    }
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => {
+      handleLocationSearch();
+    }, 500);
+    return () => clearTimeout(searchTimeout.current);
+  }, [locationSearch]);
 
   const toggleDay = (day: string) => {
     setSelectedDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
@@ -34,6 +46,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
     try {
       const results = await searchLocation(locationSearch);
       setSearchResults(results);
+      if (results.length === 0) setError("No locations found — try a different search");
     } catch {
       setError("Could not search location, please try again");
     }
@@ -64,9 +77,9 @@ export default function OnboardingScreen({ onComplete }: Props) {
       lon: selectedLocation.lon,
       trading_days: selectedDays,
       product_type: productType,
-      pitch_prepaid: pitchPrepaid,
+      pitch_prepaid: false,
     });
-    if (error) { setError(error.message); } 
+    if (error) { setError(error.message); }
     else { onComplete(); }
     setLoading(false);
   };
@@ -118,24 +131,22 @@ export default function OnboardingScreen({ onComplete }: Props) {
         <TextInput style={styles.input} placeholder="e.g. Stokesley Farmers Market" placeholderTextColor={COLORS.gray400} value={marketName} onChangeText={setMarketName} />
 
         <Text style={styles.fieldLabel}>Search for your market location</Text>
+        <Text style={styles.fieldHint}>Start typing your market town or postcode</Text>
         <View style={styles.searchRow}>
           <TextInput
             style={[styles.input, styles.searchInput]}
             placeholder="e.g. Stokesley, North Yorkshire"
             placeholderTextColor={COLORS.gray400}
             value={locationSearch}
-            onChangeText={setLocationSearch}
-            onSubmitEditing={handleLocationSearch}
+            onChangeText={(text) => { setSelectedLocation(null); setLocationSearch(text); }}
           />
-          <TouchableOpacity style={styles.searchBtn} onPress={handleLocationSearch} disabled={searching}>
-            {searching ? <ActivityIndicator color={COLORS.white} size="small" /> : <Text style={styles.searchBtnText}>Search</Text>}
-          </TouchableOpacity>
+          {searching && <ActivityIndicator color={COLORS.primary} style={{ marginLeft: 8 }} />}
         </View>
 
         {searchResults.length > 0 && !selectedLocation && (
           <View style={styles.resultsBox}>
             {searchResults.map((result, i) => (
-              <TouchableOpacity key={i} style={styles.resultItem} onPress={() => { setSelectedLocation(result); setSearchResults([]); }}>
+              <TouchableOpacity key={i} style={[styles.resultItem, i === searchResults.length - 1 && { borderBottomWidth: 0 }]} onPress={() => { setSelectedLocation(result); setSearchResults([]); }}>
                 <Text style={styles.resultName}>{result.name}</Text>
                 <Text style={styles.resultDetail}>{result.state ? `${result.state}, ` : ""}{result.country}</Text>
               </TouchableOpacity>
@@ -147,7 +158,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
           <View style={styles.selectedLocation}>
             <Text style={styles.selectedLocationText}>📍 {selectedLocation.name}{selectedLocation.state ? `, ${selectedLocation.state}` : ""}, {selectedLocation.country}</Text>
             <TouchableOpacity onPress={() => { setSelectedLocation(null); setLocationSearch(""); }}>
-              <Text style={styles.changeLocation}>Change</Text>
+              <Text style={styles.changeBtn}>Change</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -169,12 +180,6 @@ export default function OnboardingScreen({ onComplete }: Props) {
             </TouchableOpacity>
           ))}
         </View>
-
-        <TouchableOpacity style={[styles.chip, styles.chipRow, pitchPrepaid && styles.chipActive, { marginTop: 8 }]} onPress={() => setPitchPrepaid(!pitchPrepaid)}>
-          <Text style={[styles.chipText, pitchPrepaid && styles.chipTextActive]}>
-            {pitchPrepaid ? "✓" : ""} Pitch fee pre-paid
-          </Text>
-        </TouchableOpacity>
 
         {error && <Text style={styles.error}>{error}</Text>}
         <TouchableOpacity style={styles.btn} onPress={handleComplete} disabled={loading}>
@@ -199,19 +204,18 @@ const styles = StyleSheet.create({
   stepActive: { backgroundColor: COLORS.primary },
   stepDone: { backgroundColor: COLORS.success },
   stepTitle: { fontSize: FONTS.size.lg, fontWeight: "600", color: COLORS.text, marginBottom: 12 },
-  fieldLabel: { fontSize: FONTS.size.sm, fontWeight: "600", color: COLORS.text, marginBottom: 8, marginTop: 16 },
+  fieldLabel: { fontSize: FONTS.size.sm, fontWeight: "600", color: COLORS.text, marginBottom: 6, marginTop: 16 },
+  fieldHint: { fontSize: FONTS.size.xs, color: COLORS.textMuted, marginBottom: 6 },
   input: { borderWidth: 1, borderColor: COLORS.gray200, borderRadius: 12, padding: 14, fontSize: FONTS.size.md, color: COLORS.text, backgroundColor: COLORS.gray50, marginBottom: 4 },
-  searchRow: { flexDirection: "row", gap: 8, alignItems: "center" },
-  searchInput: { flex: 1, marginBottom: 0 },
-  searchBtn: { backgroundColor: COLORS.primary, borderRadius: 12, padding: 14, alignItems: "center", justifyContent: "center" },
-  searchBtnText: { color: COLORS.white, fontWeight: "600", fontSize: FONTS.size.sm },
-  resultsBox: { borderWidth: 1, borderColor: COLORS.gray200, borderRadius: 12, marginTop: 4, overflow: "hidden" },
+  searchRow: { flexDirection: "row", alignItems: "center" },
+  searchInput: { flex: 1 },
+  resultsBox: { borderWidth: 1, borderColor: COLORS.gray200, borderRadius: 12, marginTop: 8, overflow: "hidden" },
   resultItem: { padding: 14, borderBottomWidth: 0.5, borderBottomColor: COLORS.gray200 },
   resultName: { fontSize: FONTS.size.md, fontWeight: "600", color: COLORS.text },
   resultDetail: { fontSize: FONTS.size.sm, color: COLORS.textMuted, marginTop: 2 },
   selectedLocation: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: COLORS.primaryBg, borderRadius: 12, padding: 14, marginTop: 4 },
   selectedLocationText: { fontSize: FONTS.size.sm, color: COLORS.text, flex: 1 },
-  changeLocation: { fontSize: FONTS.size.sm, color: COLORS.primary, fontWeight: "600", marginLeft: 8 },
+  changeBtn: { fontSize: FONTS.size.sm, color: COLORS.primary, fontWeight: "600", marginLeft: 8 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: COLORS.gray200, backgroundColor: COLORS.gray50 },
   chipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
